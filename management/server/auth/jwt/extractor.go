@@ -3,6 +3,7 @@ package jwt
 import (
 	"errors"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -87,11 +88,45 @@ func (c ClaimsExtractor) audienceClaim(claimName string) string {
 	return url
 }
 
+// getNestedClaim retrieves a claim value that may use "parent.child" notation
+func getNestedClaim(claims jwt.MapClaims, claimPath string) (interface{}, bool) {
+	// If no dot notation, do direct lookup
+	if !strings.Contains(claimPath, ".") {
+		value, ok := claims[claimPath]
+		return value, ok
+	}
+
+	// Handle nested claims with dot notation
+	parts := strings.Split(claimPath, ".")
+	var current interface{} = map[string]interface{}(claims)
+
+	for _, part := range parts {
+		currentMap, ok := current.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+
+		value, exists := currentMap[part]
+		if !exists {
+			return nil, false
+		}
+
+		current = value
+	}
+
+	return current, true
+}
+
 func (c *ClaimsExtractor) ToUserAuth(token *jwt.Token) (nbcontext.UserAuth, error) {
 	claims := token.Claims.(jwt.MapClaims)
 	userAuth := nbcontext.UserAuth{}
 
-	userID, ok := claims[c.userIDClaim].(string)
+	userIDValue, ok := getNestedClaim(claims, c.userIDClaim)
+	if !ok {
+		return userAuth, errUserIDClaimEmpty
+	}
+
+	userID, ok := userIDValue.(string)
 	if !ok {
 		return userAuth, errUserIDClaimEmpty
 	}

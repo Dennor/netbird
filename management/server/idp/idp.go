@@ -207,6 +207,21 @@ func NewManager(ctx context.Context, config Config, appMetrics telemetry.AppMetr
 			ManagementEndpoint: config.ExtraConfig["ManagementEndpoint"],
 		}
 		return NewPocketIdManager(pocketidConfig, appMetrics)
+	case "ldap":
+		ldapConfig := LdapClientConfig{
+			Host:              config.ExtraConfig["Host"],
+			DN:                config.ExtraConfig["DN"],
+			Passwd:            config.ExtraConfig["Passwd"],
+			PasswdFile:        config.ExtraConfig["PasswdFile"],
+			BaseDN:            config.ExtraConfig["BaseDN"],
+			UserSearchDN:      config.ExtraConfig["UserSearchDN"],
+			NetbirdMetadataDN: config.ExtraConfig["NetbirdMetadataDN"],
+			Filter:            config.ExtraConfig["Filter"],
+			NameAttr:          config.ExtraConfig["NameAttr"],
+			IDAttr:            config.ExtraConfig["IDAttr"],
+			EmailAttr:         config.ExtraConfig["EmailAttr"],
+		}
+		return NewLdapManager(ldapConfig, appMetrics)
 	default:
 		return nil, fmt.Errorf("invalid manager type: %s", config.ManagerType)
 	}
