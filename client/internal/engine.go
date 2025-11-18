@@ -1437,7 +1437,39 @@ func (e *Engine) parseNATExternalIPMappings() []string {
 	for _, iFace := range e.config.IFaceBlackList {
 		ignoredIFaces[iFace] = nil
 	}
+	var externalIPs []string
 	for _, mapping := range e.config.NATExternalIPs {
+		if strings.HasPrefix(mapping, "stun/") || mapping == "stun" {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			probe := e.probeStunTurn.ProbeAllWaitResult(ctx, e.STUNs, nil)
+			for _, p := range probe {
+				if p.Err != nil {
+					log.Warnf("failed to probe STUN server %s: %v", p.URI, p.Err)
+					continue
+				}
+				if p.Addr == "" {
+					log.Warnf("STUN server %s returned empty address", p.URI)
+					continue
+				}
+				host, _, err := net.SplitHostPort(p.Addr)
+				if p.Err != nil {
+					log.Warnf("invalid STUN address %s: %v", p.Addr, err)
+					continue
+				}
+				// If mapping has a suffix (e.g., "stun/eth0"), append it to the discovered IP
+				if strings.HasPrefix(mapping, "stun/") {
+					suffix := strings.TrimPrefix(mapping, "stun/")
+					externalIPs = append(externalIPs, host+"/"+suffix)
+				} else {
+					externalIPs = append(externalIPs, host)
+				}
+			}
+		} else {
+			externalIPs = append(externalIPs, mapping)
+		}
+	}
+	for _, mapping := range externalIPs {
 		var external, internal string
 		var externalIP, internalIP net.IP
 		var err error
@@ -1476,7 +1508,7 @@ func (e *Engine) parseNATExternalIPMappings() []string {
 		mappedIPs = append(mappedIPs, mappedIP)
 		log.Infof("parsed external IP mapping of '%s' as '%s'", mapping, mappedIP)
 	}
-	if len(mappedIPs) != len(e.config.NATExternalIPs) {
+	if len(mappedIPs) != len(externalIPs) {
 		log.Warnf("one or more external IP mappings failed to parse, ignoring all mappings")
 		return nil
 	}
